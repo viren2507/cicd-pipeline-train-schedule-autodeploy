@@ -1,22 +1,25 @@
 pipeline {
     agent any
     environment {
-        //be sure to replace "bhavukm" with your own Docker Hub username
-        DOCKER_IMAGE_NAME = "bhavukm/train-schedule"
+        //be sure to replace "willbla" with your own Docker Hub username
+        DOCKER_IMAGE_NAME = "viren25/train-schedule"
+        PROJECT_ID = 'round-dreamer-355408'
+        CLUSTER_NAME = 'cluster-1'
+        LOCATION = 'us-central1-c'
+        CREDENTIALS_ID = 'kubernetes'
+        
     }
     stages {
         stage('Build') {
             steps {
                 echo 'Running build automation'
                 sh './gradlew build --no-daemon'
-                archiveArtifacts artifacts: 'dist/trainSchedule.zip'
+                archiveArtifacts artifacts: '**/*'
             }
         }
         stage('Build Docker Image') {
-            when {
-                branch 'master'
-            }
-            steps {
+           
+           steps {
                 script {
                     app = docker.build(DOCKER_IMAGE_NAME)
                     app.inside {
@@ -26,12 +29,10 @@ pipeline {
             }
         }
         stage('Push Docker Image') {
-            when {
-                branch 'master'
-            }
+          
             steps {
                 script {
-                    docker.withRegistry('https://registry.hub.docker.com', 'docker_hub_login') {
+                    docker.withRegistry('https://registry.hub.docker.com', 'viren25') {
                         app.push("${env.BUILD_NUMBER}")
                         app.push("latest")
                     }
@@ -39,41 +40,36 @@ pipeline {
             }
         }
         stage('CanaryDeploy') {
-            when {
-                branch 'master'
-            }
             environment { 
                 CANARY_REPLICAS = 1
             }
             steps {
-                kubernetesDeploy(
-                    kubeconfigId: 'kubeconfig',
-                    configs: 'train-schedule-kube-canary.yml',
-                    enableConfigSubstitution: true
-                )
+                step([$class: 'KubernetesEngineBuilder', 
+                        projectId: env.PROJECT_ID,
+                        clusterName: env.CLUSTER_NAME,
+                        zone: env.LOCATION,
+                        manifestPattern: 'train-schedule-kube-canary.yml',
+                        credentialsId: env.CREDENTIALS_ID,
+                        verifyDeployments: true])
             }
         }
         stage('DeployToProduction') {
-            when {
-                branch 'master'
-            }
+            
             environment { 
                 CANARY_REPLICAS = 0
             }
             steps {
-                input 'Deploy to Production?'
-                milestone(1)
-                kubernetesDeploy(
-                    kubeconfigId: 'kubeconfig',
-                    configs: 'train-schedule-kube-canary.yml',
-                    enableConfigSubstitution: true
-                )
-                kubernetesDeploy(
-                    kubeconfigId: 'kubeconfig',
-                    configs: 'train-schedule-kube.yml',
-                    enableConfigSubstitution: true
-                )
+              step([$class: 'KubernetesEngineBuilder', 
+                        projectId: env.PROJECT_ID,
+                        clusterName: env.CLUSTER_NAME,
+                        zone: env.LOCATION,
+                        manifestPattern: 'train-schedule-kube.yml',
+                        credentialsId: env.CREDENTIALS_ID,
+                        verifyDeployments: true])
+                        
+              
             }
         }
     }
 }
+
