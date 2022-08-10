@@ -2,6 +2,7 @@ kind: Service
 apiVersion: v1
 metadata:
   name: train-schedule-service-canary
+  namespace: monitoring
 spec:
   type: NodePort
   selector:
@@ -18,6 +19,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: train-schedule-deployment-canary
+  namespace: monitoring
   labels:
     app: train-schedule
 spec:
